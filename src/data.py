@@ -1,16 +1,14 @@
-
 import json
 
 import torch
 from torch.utils.data import Dataset
 
-
 class CustomDataset(Dataset):
     def __init__(self, fname, tokenizer):
-        IGNORE_INDEX=-100
-        self.inp = []
-        self.trg = []
-        self.label = []
+        IGNORE_INDEX = -100  # 무시할 인덱스 값 설정
+        self.inp = []  # 입력 데이터를 저장할 리스트
+        self.trg = []  # 타겟 데이터를 저장할 리스트
+        self.label = []  # 레이블 데이터를 저장할 리스트
 
         PROMPT = '''You are a helpful AI assistant. Please answer the user's questions kindly. 당신은 유능한 AI 어시스턴트 입니다. 사용자의 질문에 대해 친절하게 답변해주세요.'''
         answer_dict = {
@@ -21,8 +19,9 @@ class CustomDataset(Dataset):
         }
 
         with open(fname, "r") as f:
-            data = json.load(f)
+            data = json.load(f)  # JSON 파일을 읽어옴
 
+        # 대화 내용을 형식에 맞게 변환하는 함수
         def make_chat(inp):
             chat = ["[Conversation]"]
             for cvt in inp['conversation']:
@@ -46,18 +45,20 @@ class CustomDataset(Dataset):
             return chat
         
         for example in data:
-            chat = make_chat(example["input"])
+            chat = make_chat(example["input"])  # 대화 내용을 형식에 맞게 변환
             message = [
                 {"role": "system", "content": PROMPT},
                 {"role": "user", "content": chat},
             ]
      
+            # 토크나이저를 사용하여 입력 데이터 변환
             source = tokenizer.apply_chat_template(
                 message,
                 add_generation_prompt=True,
                 return_tensors="pt",
             )
 
+            # 타겟 데이터 설정
             target = ""
             if example["output"] == "inference_1":
                 target = f"A. {example['input']['inference_1']}{tokenizer.eos_token}"
@@ -72,6 +73,7 @@ class CustomDataset(Dataset):
                       return_tensors="pt")
             target["input_ids"] = target["input_ids"].type(torch.int64)
 
+            # 입력 데이터와 타겟 데이터를 연결하여 최종 입력 및 레이블 생성
             input_ids = torch.concat((source[0], target["input_ids"][0]))
             labels = torch.concat((torch.LongTensor([IGNORE_INDEX] * source[0].shape[0]), target["input_ids"][0]))
             self.inp.append(input_ids)
@@ -79,11 +81,10 @@ class CustomDataset(Dataset):
             self.trg.append(answer_dict[example["output"]])
 
     def __len__(self):
-        return len(self.inp)
+        return len(self.inp)  # 데이터셋의 길이 반환
 
     def __getitem__(self, idx):
-        return self.inp[idx], self.trg[idx]
-
+        return self.inp[idx], self.trg[idx]  # 주어진 인덱스의 데이터 반환
 
 class DataCollatorForSupervisedDataset(object):
     def __init__(self, tokenizer):
@@ -91,12 +92,16 @@ class DataCollatorForSupervisedDataset(object):
 
     def __call__(self, instances):
         input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        
+        # 입력 데이터 패딩
         input_ids = torch.nn.utils.rnn.pad_sequence(
             [torch.tensor(ids) for ids in input_ids], batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
+        # 레이블 데이터 패딩
         labels = torch.nn.utils.rnn.pad_sequence([torch.tensor(lbls) for lbls in labels], batch_first=True, padding_value=-100)
+        
         return dict(
             input_ids=input_ids,
             labels=labels,
-            attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
+            attention_mask=input_ids.ne(self.tokenizer.pad_token_id),  # 패딩 토큰이 아닌 부분을 표시하는 attention mask 생성
         )

@@ -23,21 +23,21 @@ class CustomDataset(Dataset):
 
         # 대화 내용을 형식에 맞게 변환하는 함수
         def make_chat(inp):
-            chat = ["[Conversation]"]
-            for cvt in inp['conversation']:
-                speaker = cvt['speaker']
-                utterance = cvt['utterance']
-                chat.append(f"화자{speaker}: {utterance}")
-            chat = "\n".join(chat)
+            chat = ["[Conversation]"] # 리스트를 초기화하고 [Conversation] 태그를 추가하여 대화 내용이 시작됨을 나타냄
+            for cvt in inp['conversation']: # 입력 데이터에서 `conversation` 키에 저장된 대화 내용을 순회
+                speaker = cvt['speaker'] # 각 대화의 화자 추출
+                utterance = cvt['utterance'] # 각 대화의 발언 추출
+                chat.append(f"화자{speaker}: {utterance}") # 대화 내용을 화자{speaker}: {utterance} 형식으로 변환하여 chat 리스트에 추가
+            chat = "\n".join(chat) # chat 리스트의 모든 요소를 줄바꿈(\n)을 사용하여 하나의 문자열로 결합
 
-            question = f"[Question]\n위 대화의 {inp['category']}"
-            if (ord(inp['category'][-1]) - ord("가")) % 28 > 0:
+            question = f"[Question]\n위 대화의 {inp['category']}" # 질문 텍스트를 `[Question]` 태그와 함께 생성 후 `inp['category']` 값에 따라 질문의 카테고리를 추가
+            if (ord(inp['category'][-1]) - ord("가")) % 28 > 0: # 한국어의 조사를 올바르게 추가하기 위해 마지막 글자의 유니코드 값을 확인
                 question += "으로"
             else:
                 question = "로"
             question += " 올바른 지문은?"
                 
-            chat = chat + "\n\n" + question + "\n\n[Option]\n"
+            chat = chat + "\n\n" + question + "\n\n[Option]\n" # `chat` 문자열에 질문을 추가, `[option]` 태그를 추가하여 선택지 섹션을 시작
             chat += f"A. {inp['inference_1']}\n"
             chat += f"B. {inp['inference_2']}\n"
             chat += f"C. {inp['inference_3']}"
@@ -50,27 +50,27 @@ class CustomDataset(Dataset):
                 {"role": "system", "content": PROMPT},
                 {"role": "user", "content": chat},
             ]
-     
+    
             # 토크나이저를 사용하여 입력 데이터 변환
             source = tokenizer.apply_chat_template(
                 message,
-                add_generation_prompt=True,
-                return_tensors="pt",
+                add_generation_prompt=True, # 생성 프롬프트를 추가함을 의미
+                return_tensors="pt", # 결과를 PyTorch 텐서 형식으로 반환
             )
 
             # 타겟 데이터 설정
             target = ""
             if example["output"] == "inference_1":
-                target = f"A. {example['input']['inference_1']}{tokenizer.eos_token}"
+                target = f"A. {example['input']['inference_1']}{tokenizer.eos_token}" # eos_token: "end of sequence"의 약자로, 시퀀스(문장, 문단 등)의 끝을 나타내는 토큰
             elif example["output"] == "inference_2":
                 target = f"B. {example['input']['inference_2']}{tokenizer.eos_token}"
             elif example["output"] == "inference_3":
                 target = f"C. {example['input']['inference_3']}{tokenizer.eos_token}"
                 
-            target = tokenizer(target,
-                      return_attention_mask=False,
-                      add_special_tokens=False,
-                      return_tensors="pt")
+            target = tokenizer(target, # `tokenizer`를 사용하여 타겟 문자열을 토큰화
+                        return_attention_mask=False, # 어텐션 마스크를 생성하지 않음
+                        add_special_tokens=False, # 특별 토큰을 추가하지 않음
+                        return_tensors="pt")
             target["input_ids"] = target["input_ids"].type(torch.int64)
 
             # 입력 데이터와 타겟 데이터를 연결하여 최종 입력 및 레이블 생성
@@ -86,11 +86,11 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         return self.inp[idx], self.trg[idx]  # 주어진 인덱스의 데이터 반환
 
-class DataCollatorForSupervisedDataset(object):
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
+class DataCollatorForSupervisedDataset(object): # 데이터 배치를 준비하는 역할
+    def __init__(self, tokenizer): # 클래스가 초기화 될 때 호출
+        self.tokenizer = tokenizer # `tokenizer`는 토크나이저 객체로, 이를 통해 패딩 토큰 값을 얻음
 
-    def __call__(self, instances):
+    def __call__(self, instances): # 인스턴스들을 패딩하고, 모델에 필요한 형식으로 변환
         input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
         
         # 입력 데이터 패딩
